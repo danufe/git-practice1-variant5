@@ -1,2 +1,2 @@
 def get_status():
-    return "Database is not connected"
+    return "Database connection is not configured"
