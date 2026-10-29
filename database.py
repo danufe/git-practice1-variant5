@@ -1,2 +1,2 @@
 def get_status():
-    return "Database connection is not configured"
+    return "PostgreSQL connection is not configured"
