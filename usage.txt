@@ -1,0 +1,2 @@
+Run the application: python main.py
+PostgreSQL connection is not configured yet.
