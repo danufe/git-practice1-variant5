@@ -10,11 +10,18 @@
 
 ```bash
 python main.py
+python main.py --status-json
+python main.py --version
+python main.py --help
 python -m unittest discover -s tests -v
 ```
 
 Приложение выводит название и статус настройки PostgreSQL. Модули уведомлений
 и отчётов возвращают демонстрационные строки.
+
+`--status-json` возвращает JSON с ключами `name`, `version` и
+`database_status`. `--version` печатает только номер версии. Эти режимы
+запускаются отдельно. Для списка поддерживаемых параметров используйте `--help`.
 
 ## Документация
 

@@ -31,6 +31,13 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("<h2>main.py</h2>", self.html)
         self.assertIn("<code>main(", self.html)
 
+    def test_documentation_includes_status_api(self):
+        self.assertIn("<code>get_application_status() -&gt; dict[str, str]</code>", self.html)
+
+    def test_documentation_includes_new_command_line_modes(self):
+        self.assertIn("--status-json", self.html)
+        self.assertIn("--version", self.html)
+
     def test_documentation_includes_database_signature(self):
         self.assertIn("<code>get_status() -&gt; str</code>", self.html)
 
