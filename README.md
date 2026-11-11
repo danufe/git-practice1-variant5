@@ -6,7 +6,7 @@
 
 ## Запуск приложения
 
-Для приложения и тестов нужен Python 3.12. Используется стандартная библиотека.
+Для приложения и CI используется Python 3.12 и стандартная библиотека.
 Команды выполняются из корня репозитория.
 
 ```bash
@@ -14,7 +14,7 @@ python main.py
 python main.py --status-json
 python main.py --version
 python main.py --help
-python -m unittest discover -s tests -v
+python -m scripts.check_project
 ```
 
 Приложение выводит название и статус настройки PostgreSQL. Модули уведомлений
@@ -36,17 +36,16 @@ python -m scripts.build_docs --output build/docs
 
 ## CI/CD
 
-`.github/workflows/main.yml` запускает тесты и сборку HTML при push в любую
-ветвь, при push тега `v*` и при обновлении pull request в `main`. Документация
-доступна в разделе **Artifacts** успешного запуска как `project-docs`.
+`.github/workflows/main.yml` проверяет запуск приложения и собирает HTML
+при push в любую ветвь и при открытии или обновлении pull request в `main`.
+Скрипт проверки запускает `main.py --status-json` и сверяет значения полей.
+Документация доступна в разделе **Artifacts** как `project-docs`.
 
 Готовые pull request из ветвей `development` и `release` этого репозитория
-вливаются в `main` заданием **Merge tested pull request** после успешной
+вливаются в `main` заданием **Merge verified pull request** после успешной
 проверки. Задание сверяет ревизии ветвей и запускает контрольный CI на `main`
 после слияния. Черновики и pull request из форков проходят без этого задания.
 
-Для публикации версии из `main` откройте **Actions → Python CI/CD → Run
-workflow**, выберите ветвь `main` и отметьте `publish_release`. Версия тега
-берётся из `config.py`. После успешной проверки workflow публикует релиз
-GitHub и прикладывает `documentation.zip`. При push тега `v*` публикация
-также запускается после сверки тега с версией приложения.
+Для публикации тега откройте **Actions → Python CI/CD → Run workflow**,
+выберите `main` и отметьте `publish_tag`. После проверки GitHub создаст
+тег вида `v0.3.0` из версии в `config.py` на проверенном коммите `main`.
