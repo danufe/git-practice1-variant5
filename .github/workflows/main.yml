@@ -1,0 +1,130 @@
+name: Python CI/CD
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_tag:
+        description: Publish the Git tag for the version in config.py (main only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tests and documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version_tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Run unit and integration tests
+        run: python -m unittest discover -s tests -v
+      - name: Read application version
+        id: version
+        run: |
+          python - <<'PY'
+          import os
+          from config import APP_VERSION
+
+          tag = f"v{APP_VERSION}"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"tag={tag}", file=output)
+          print(f"Application version {APP_VERSION}")
+          PY
+      - name: Generate HTML documentation
+        run: python -m scripts.build_docs
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-docs
+          path: build/docs/index.html
+          if-no-files-found: error
+          retention-days: 30
+
+  merge:
+    name: Merge verified pull request
+    needs: verify
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.base_ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      (github.head_ref == 'development' || github.head_ref == 'release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: merge-main
+      cancel-in-progress: false
+    steps:
+      - name: Merge the verified revision and run CI on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          merged=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq .merged)
+          if [[ "$merged" != true ]]; then
+            tested_base=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq '.parents[0].sha')
+            current_base=$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')
+            if [[ "$tested_base" != "$current_base" ]]; then
+              echo "main changed during CI. Update the pull request branch to rerun verification."
+              exit 1
+            fi
+            gh pr merge "$PR_NUMBER" --merge --match-head-commit "$HEAD_SHA"
+            echo "Merged pull request #$PR_NUMBER after successful verification."
+          fi
+          gh workflow run main.yml --ref main
+
+  tag:
+    name: Publish version tag
+    needs: verify
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.publish_tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: tag-${{ needs.verify.outputs.version_tag }}
+      cancel-in-progress: false
+    steps:
+      - name: Create Git tag at the verified main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION_TAG: ${{ needs.verify.outputs.version_tag }}
+        run: |
+          current_main=$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')
+          if [[ "$current_main" != "$GITHUB_SHA" ]]; then
+            echo "main changed during CI. Run publication again on the current main."
+            exit 1
+          fi
+          if gh api "repos/$GH_REPO/git/ref/tags/$VERSION_TAG" --silent 2>/dev/null; then
+            tag_commit=$(gh api "repos/$GH_REPO/commits/$VERSION_TAG" --jq .sha)
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "Tag $VERSION_TAG already points to a different commit."
+              exit 1
+            fi
+            echo "Tag $VERSION_TAG already points to $GITHUB_SHA."
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$VERSION_TAG" -f sha="$GITHUB_SHA" --jq .ref
+          fi
