@@ -22,6 +22,11 @@ class ApplicationTests(unittest.TestCase):
     def test_version_uses_major_minor_patch(self):
         self.assertRegex(APP_VERSION, r"^\d+\.\d+\.\d+$")
 
+    def test_changelog_starts_with_current_version(self):
+        lines = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+        versions = [line for line in lines if line.startswith("## ")]
+        self.assertEqual(versions[:1], [f"## {APP_VERSION}"])
+
     def test_database_status_reports_missing_configuration(self):
         self.assertEqual(get_status(), "PostgreSQL connection is not configured")
 
