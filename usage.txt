@@ -1,2 +1,3 @@
 Run the application: python main.py
-PostgreSQL connection is not configured yet.
+Enter 1 for Moscow, 2 for Saint Petersburg, or 3 for Kazan.
+The program reads current weather from Open-Meteo and prints one word.
