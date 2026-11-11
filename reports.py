@@ -1,2 +1,6 @@
-def create_report():
+"""Демонстрационный модуль отчётов."""
+
+
+def create_report() -> str:
+    """Вернуть учебное сообщение о создании отчёта."""
     return "Report created"
