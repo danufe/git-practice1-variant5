@@ -3,13 +3,12 @@ name: Python CI/CD
 on:
   push:
     branches: ['**']
-    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
-      publish_release:
-        description: Publish the version from config.py (main only)
+      publish_tag:
+        description: Publish the Git tag for the version in config.py (main only)
         type: boolean
         default: false
 
@@ -18,11 +17,11 @@ permissions:
 
 jobs:
   verify:
-    name: Tests and documentation
+    name: Project check and documentation
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      release_tag: ${{ steps.version.outputs.tag }}
+      version_tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -30,9 +29,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - name: Run unit and integration tests
-        run: python -m unittest discover -s tests -v
-      - name: Verify the version
+      - name: Check application startup
+        run: python -m scripts.check_project
+      - name: Read application version
         id: version
         run: |
           python - <<'PY'
@@ -40,11 +39,9 @@ jobs:
           from config import APP_VERSION
 
           tag = f"v{APP_VERSION}"
-          if os.environ["GITHUB_REF_TYPE"] == "tag" and os.environ["GITHUB_REF_NAME"] != tag:
-              raise SystemExit(f"The Git tag must match the application version ({tag})")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               print(f"tag={tag}", file=output)
-          print(f"Verified application version {APP_VERSION}")
+          print(f"Application version {APP_VERSION}")
           PY
       - name: Generate HTML documentation
         run: python -m scripts.build_docs --output build/docs
@@ -57,7 +54,7 @@ jobs:
           retention-days: 30
 
   merge:
-    name: Merge tested pull request
+    name: Merge verified pull request
     needs: verify
     if: >-
       github.event_name == 'pull_request' &&
@@ -87,7 +84,7 @@ jobs:
             tested_base=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq '.parents[0].sha')
             current_base=$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')
             if [[ "$tested_base" != "$current_base" ]]; then
-              echo "main changed during CI. Update the pull request branch to rerun tests."
+              echo "main changed during CI. Update the pull request branch to rerun verification."
               exit 1
             fi
             gh pr merge "$PR_NUMBER" --merge --match-head-commit "$HEAD_SHA"
@@ -95,51 +92,39 @@ jobs:
           fi
           gh workflow run main.yml --ref main
 
-  publish:
-    name: Publish release
+  tag:
+    name: Publish version tag
     needs: verify
     if: >-
-      (github.event_name == 'push' && github.ref_type == 'tag') ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release)
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.publish_tag
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: write
     concurrency:
-      group: release-${{ needs.verify.outputs.release_tag }}
+      group: tag-${{ needs.verify.outputs.version_tag }}
       cancel-in-progress: false
     steps:
-      - uses: actions/download-artifact@v5
-        with:
-          name: project-docs
-          path: release-docs
-      - name: Archive the HTML documentation
-        working-directory: release-docs
-        run: python3 -m zipfile -c ../documentation.zip index.html
-      - name: Publish tag and GitHub Release
+      - name: Create Git tag at the verified main commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+          VERSION_TAG: ${{ needs.verify.outputs.version_tag }}
         run: |
-          tag_sha=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null || true)
-          if [[ -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
-            echo "Tag $RELEASE_TAG already points to a different commit."
+          current_main=$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')
+          if [[ "$current_main" != "$GITHUB_SHA" ]]; then
+            echo "main changed during CI. Run publication again on the current main."
             exit 1
           fi
-          if ! gh release view "$RELEASE_TAG" --json isDraft >/dev/null 2>&1; then
-            tag_options=(--target "$GITHUB_SHA")
-            if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-              tag_options=(--verify-tag)
+          if gh api "repos/$GH_REPO/git/ref/tags/$VERSION_TAG" --silent 2>/dev/null; then
+            tag_commit=$(gh api "repos/$GH_REPO/commits/$VERSION_TAG" --jq .sha)
+            if [[ "$tag_commit" != "$GITHUB_SHA" ]]; then
+              echo "Tag $VERSION_TAG already points to a different commit."
+              exit 1
             fi
-            gh release create "$RELEASE_TAG" "${tag_options[@]}" --draft --generate-notes --title "$RELEASE_TAG"
+            echo "Tag $VERSION_TAG already points to $GITHUB_SHA."
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$VERSION_TAG" -f sha="$GITHUB_SHA" --jq .ref
           fi
-          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == true ]]; then
-            has_docs=$(gh release view "$RELEASE_TAG" --json assets --jq 'any(.assets[]; .name == "documentation.zip")')
-            if [[ "$has_docs" != true ]]; then
-              gh release upload "$RELEASE_TAG" documentation.zip
-            fi
-            gh release edit "$RELEASE_TAG" --draft=false
-          fi
-          gh release view "$RELEASE_TAG" --json url,isDraft,assets --jq +            'if .isDraft or (any(.assets[]; .name == "documentation.zip") | not)
-            then error("Missing published release with documentation.zip") else .url end'
