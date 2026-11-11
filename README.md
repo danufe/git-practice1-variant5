@@ -39,6 +39,11 @@ python -m scripts.build_docs --output build/docs
 ветвь, при push тега `v*` и при обновлении pull request в `main`. Документация
 доступна в разделе **Artifacts** успешного запуска как `project-docs`.
 
+Готовые pull request из ветвей `development` и `release` этого репозитория
+вливаются в `main` заданием **Merge tested pull request** после успешной
+проверки. Задание сверяет ревизии ветвей и запускает контрольный CI на `main`
+после слияния. Черновики и pull request из форков проходят без этого задания.
+
 Для публикации версии из `main` откройте **Actions → Python CI/CD → Run
 workflow**, выберите ветвь `main` и отметьте `publish_release`. Версия тега
 берётся из `config.py`. После успешной проверки workflow публикует релиз
