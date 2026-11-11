@@ -1,6 +1,2 @@
-"""Демонстрационный модуль уведомлений."""
-
-
-def send_notification() -> str:
-    """Вернуть учебное сообщение об отправке уведомления."""
+def send_notification():
     return "Notification sent successfully"
