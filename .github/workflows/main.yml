@@ -1,0 +1,145 @@
+name: Python CI/CD
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the version from config.py (main only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Tests and documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Run unit and integration tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify the version
+        id: version
+        run: |
+          python - <<'PY'
+          import os
+          from config import APP_VERSION
+
+          tag = f"v{APP_VERSION}"
+          if os.environ["GITHUB_REF_TYPE"] == "tag" and os.environ["GITHUB_REF_NAME"] != tag:
+              raise SystemExit(f"The Git tag must match the application version ({tag})")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              print(f"tag={tag}", file=output)
+          print(f"Verified application version {APP_VERSION}")
+          PY
+      - name: Generate HTML documentation
+        run: python -m scripts.build_docs --output build/docs
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-docs
+          path: build/docs/index.html
+          if-no-files-found: error
+          retention-days: 30
+
+  merge:
+    name: Merge tested pull request
+    needs: verify
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.base_ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      (github.head_ref == 'development' || github.head_ref == 'release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: merge-main
+      cancel-in-progress: false
+    steps:
+      - name: Merge the verified revision and run CI on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          merged=$(gh api "repos/$GH_REPO/pulls/$PR_NUMBER" --jq .merged)
+          if [[ "$merged" != true ]]; then
+            tested_base=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq '.parents[0].sha')
+            current_base=$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')
+            if [[ "$tested_base" != "$current_base" ]]; then
+              echo "main changed during CI. Update the pull request branch to rerun tests."
+              exit 1
+            fi
+            gh pr merge "$PR_NUMBER" --merge --match-head-commit "$HEAD_SHA"
+            echo "Merged pull request #$PR_NUMBER after successful verification."
+          fi
+          gh workflow run main.yml --ref main
+
+  publish:
+    name: Publish release
+    needs: verify
+    if: >-
+      (github.event_name == 'push' && github.ref_type == 'tag') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ needs.verify.outputs.release_tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: project-docs
+          path: release-docs
+      - name: Archive the HTML documentation
+        working-directory: release-docs
+        run: python3 -m zipfile -c ../documentation.zip index.html
+      - name: Publish tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.verify.outputs.release_tag }}
+        run: |
+          tag_sha=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null || true)
+          if [[ -n "$tag_sha" && "$tag_sha" != "$GITHUB_SHA" ]]; then
+            echo "Tag $RELEASE_TAG already points to a different commit."
+            exit 1
+          fi
+          if ! gh release view "$RELEASE_TAG" --json isDraft >/dev/null 2>&1; then
+            tag_options=(--target "$GITHUB_SHA")
+            if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+              tag_options=(--verify-tag)
+            fi
+            gh release create "$RELEASE_TAG" "${tag_options[@]}" --draft --generate-notes --title "$RELEASE_TAG"
+          fi
+          if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == true ]]; then
+            has_docs=$(gh release view "$RELEASE_TAG" --json assets --jq 'any(.assets[]; .name == "documentation.zip")')
+            if [[ "$has_docs" != true ]]; then
+              gh release upload "$RELEASE_TAG" documentation.zip
+            fi
+            gh release edit "$RELEASE_TAG" --draft=false
+          fi
+          gh release view "$RELEASE_TAG" --json url,isDraft,assets --jq +            'if .isDraft or (any(.assets[]; .name == "documentation.zip") | not)
+            then error("Missing published release with documentation.zip") else .url end'
