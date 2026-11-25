@@ -1,3 +1,3 @@
-Run the application: python main.py
-Enter 1 for Moscow, 2 for Saint Petersburg, or 3 for Kazan.
-The program reads current weather from Open-Meteo and prints one word.
+Запуск: python main.py
+Введите целое число от 0 до 100.
+Число × случайный множитель → факториал → SHA-256 → индекс слова.

@@ -46,7 +46,7 @@ jobs:
       - name: Generate HTML documentation
         run: python -m scripts.build_docs
       - name: Upload documentation
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: project-docs
           path: build/docs/index.html
