@@ -10,6 +10,8 @@ from math import factorial
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+__version__ = "1.0.1"
+
 DICTIONARY_URL = "https://datasets-server.huggingface.co/rows"
 DICTIONARY = "KvaytG/en-ru-statistical-dict-20m-corpus"
 ROW_COUNT = 56_624
@@ -57,7 +59,12 @@ def format_word(word: str, uppercase: bool = False) -> str:
     return word
     
 def main() -> int:
-    """Читает число и выводит слово, выбранное по результату расчёта."""
+    """Обрабатывает ввод пользователя, аргументы командной строки,
+    получение слова из онлайн-словаря и вывод результата."""
+
+    if "--version" in sys.argv:
+        print(__version__)
+        return 0
     print(PROMPT, file=sys.stderr)
     try:
         index = word_index(int(input()))

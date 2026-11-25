@@ -91,7 +91,14 @@ class TestMain(unittest.TestCase):
 
             result = main.main()
             return result, output.getvalue()
-
+                 
+    def test_version(self):
+        with patch("sys.argv", ["main.py", "--version"]), \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            result = main.main()
+            self.assertEqual(result, 0)
+            self.assertEqual(output.getvalue().strip(), "1.0.1")
+                 
     def test_success(self):
         result, output = self.run_app("10")
         self.assertEqual(result, 0)

@@ -1,3 +1,4 @@
+
 name: Python CI
 
 on:
@@ -14,10 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+
       - name: Check Python syntax
         run: python -m py_compile main.py
+
       - name: Run unit tests
         run: python -m unittest discover -v
+
+      - name: Generate documentation
+        run: python -m pydoc -w main
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-documentation
+          path: main.html
+          if-no-files-found: error
