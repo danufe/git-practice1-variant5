@@ -59,10 +59,12 @@ def format_word(word: str, uppercase: bool = False) -> str:
     return word
     
 def main() -> int:
+    """Обрабатывает ввод пользователя, аргументы командной строки,
+    получение слова из онлайн-словаря и вывод результата."""
+
     if "--version" in sys.argv:
         print(__version__)
         return 0
-    """Читает число и выводит слово, выбранное по результату расчёта."""
     print(PROMPT, file=sys.stderr)
     try:
         index = word_index(int(input()))
