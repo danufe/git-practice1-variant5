@@ -1,36 +1,71 @@
-"""Случайное слово по числу пользователя и результату вычислений."""
+"""Консольный генератор русских слов из онлайн-словаря."""
 
+import json
 import random
 import sys
 from hashlib import sha256
+from http.client import HTTPException
 from math import factorial
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
-WORDS = (
-    "кот", "река", "ветер", "солнце", "книга", "лес", "облако", "море",
-    "звезда", "камень", "дорога", "луна", "цветок", "дождь", "огонь", "снег",
-)
+DICTIONARY_URL = "https://datasets-server.huggingface.co/rows"
+DICTIONARY = "KvaytG/en-ru-statistical-dict-20m-corpus"
+ROW_COUNT = 56_624
+PROMPT = "Введите целое число от 0 до 100."
 
 
-def choose_word(number: int) -> str:
-    """Умножить число на случайный множитель, взять факториал, добавить случайное число и выбрать слово по SHA-256."""
+def word_index(number: int) -> int:
+    """Вычисляет номер строки онлайн-словаря."""
     if not 0 <= number <= 100:
-        raise ValueError("Введите целое число от 0 до 100.")
+        raise ValueError(PROMPT)
+
     product = number * random.randint(1, 5)
     result = factorial(product) + random.randint(0, 100)
     digest = sha256(str(result).encode("utf-8")).digest()
-    index = int.from_bytes(digest, "big") % len(WORDS)
-    return WORDS[index]
+    return int.from_bytes(digest, "big") % ROW_COUNT
+
+
+def fetch_word(index: int) -> str:
+    """Запрашивает одну строку словаря и возвращает русское слово."""
+    query = urlencode(
+        {
+            "dataset": DICTIONARY,
+            "config": "default",
+            "split": "train",
+            "offset": index,
+            "length": 1,
+        }
+    )
+    with urlopen(f"{DICTIONARY_URL}?{query}", timeout=20) as response:
+        data = json.load(response)
+
+    try:
+        word = data["rows"][0]["row"]["russian_word"]
+    except (IndexError, KeyError, TypeError) as error:
+        raise ValueError("В ответе словаря отсутствует слово.") from error
+
+    if not isinstance(word, str) or len(word.split()) != 1:
+        raise ValueError("В ответе словаря ожидалось одно слово.")
+    return word.strip()
 
 
 def main() -> int:
-    """Прочитать целое число от 0 до 100 и вывести одно слово."""
-    print("Введите целое число от 0 до 100.", file=sys.stderr)
+    """Читает число и выводит слово, выбранное по результату расчёта."""
+    print(PROMPT, file=sys.stderr)
     try:
-        number = int(input())
-        print(choose_word(number))
+        index = word_index(int(input()))
     except (ValueError, EOFError):
-        print("Ошибка. Введите целое число от 0 до 100.", file=sys.stderr)
+        print(f"Ошибка. {PROMPT}", file=sys.stderr)
         return 1
+
+    try:
+        word = fetch_word(index)
+    except (OSError, HTTPException, ValueError):
+        print("Ошибка. Не удалось получить слово из онлайн-словаря.", file=sys.stderr)
+        return 1
+
+    print(word)
     return 0
 
 
