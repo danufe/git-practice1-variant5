@@ -1,3 +1,4 @@
+# Application for generating a random word based on user input
 """Консольный генератор русских слов из онлайн-словаря."""
 
 import json
