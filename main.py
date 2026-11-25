@@ -59,6 +59,9 @@ def format_word(word: str, uppercase: bool = False) -> str:
     return word
     
 def main() -> int:
+    if "--version" in sys.argv:
+        print(__version__)
+        return 0
     """Читает число и выводит слово, выбранное по результату расчёта."""
     print(PROMPT, file=sys.stderr)
     try:
