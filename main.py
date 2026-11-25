@@ -50,7 +50,12 @@ def fetch_word(index: int) -> str:
         raise ValueError("В ответе словаря ожидалось одно слово.")
     return word.strip()
 
-
+def format_word(word: str, uppercase: bool = False) -> str:
+    """Форматирует слово в зависимости от выбранного режима."""
+    if uppercase:
+        return word.upper()
+    return word
+    
 def main() -> int:
     """Читает число и выводит слово, выбранное по результату расчёта."""
     print(PROMPT, file=sys.stderr)
@@ -66,7 +71,7 @@ def main() -> int:
         print("Ошибка. Не удалось получить слово из онлайн-словаря.", file=sys.stderr)
         return 1
 
-    print(word)
+    print(format_word(word, "--uppercase" in sys.argv))
     return 0
 
 
