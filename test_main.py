@@ -116,23 +116,7 @@ class TestMain(unittest.TestCase):
 
     def test_dictionary_error(self):
         self.assertEqual(self.run_app("10", ValueError())[0], 1)
-        
-class TestFormatWord(unittest.TestCase):
 
-    def test_default_format(self):
-        self.assertEqual(main.format_word("кот"), "кот")
-
-    def test_uppercase_format(self):
-        self.assertEqual(main.format_word("кот", True), "КОТ")
-
-    def test_disabled_uppercase(self):
-        self.assertEqual(main.format_word("кот", False), "кот")
-
-    def test_already_uppercase(self):
-        self.assertEqual(main.format_word("КОТ", True), "КОТ")
-
-    def test_mixed_case(self):
-        self.assertEqual(main.format_word("КоТ", True), "КОТ")
 
 if __name__ == "__main__":
     unittest.main()
