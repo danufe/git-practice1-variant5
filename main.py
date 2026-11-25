@@ -10,6 +10,8 @@ from math import factorial
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
+__version__ = "1.0.1"
+
 DICTIONARY_URL = "https://datasets-server.huggingface.co/rows"
 DICTIONARY = "KvaytG/en-ru-statistical-dict-20m-corpus"
 ROW_COUNT = 56_624
