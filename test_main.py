@@ -123,7 +123,7 @@ class TestFormatWord(unittest.TestCase):
         self.assertEqual(main.format_word("кот"), "кот")
         
     def test_uppercase_ci_check(self):
-        self.assertEqual(main.format_word("слово", True), "слово")
+        self.assertEqual(main.format_word("слово", True), "СЛОВО")
         
     def test_uppercase_format(self):
         self.assertEqual(main.format_word("кот", True), "КОТ")
