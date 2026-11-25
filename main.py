@@ -12,11 +12,11 @@ WORDS = (
 
 
 def choose_word(number: int) -> str:
-    """Умножить число на случайный множитель, взять факториал и выбрать слово по SHA-256."""
+    """Умножить число на случайный множитель, взять факториал, добавить случайное число и выбрать слово по SHA-256."""
     if not 0 <= number <= 100:
         raise ValueError("Введите целое число от 0 до 100.")
     product = number * random.randint(1, 5)
-    result = factorial(product)
+    result = factorial(product) + random.randint(0, 100)
     digest = sha256(str(result).encode("utf-8")).digest()
     index = int.from_bytes(digest, "big") % len(WORDS)
     return WORDS[index]

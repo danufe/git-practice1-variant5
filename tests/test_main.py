@@ -4,7 +4,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import main
 
@@ -30,8 +30,9 @@ class WordTests(unittest.TestCase):
         calculate.assert_called_once_with(135)
 
     def test_known_calculation_selects_expected_word(self):
-        with patch("main.random.randint", return_value=3):
-            self.assertEqual(main.choose_word(45), "огонь")
+        with patch("main.random.randint", side_effect=[3, 72]) as random_value:
+            self.assertEqual(main.choose_word(45), "облако")
+        self.assertEqual(random_value.call_args_list, [call(1, 5), call(0, 100)])
 
 
 class ConsoleTests(unittest.TestCase):
